@@ -80,7 +80,7 @@
     .input-wrap { position:relative; }
     .input-wrap .field-icon { position:absolute; left:15px; top:50%; transform:translateY(-50%); color:#87958c; font-size:16px; pointer-events:none; }
     input { width:100%; height:53px; border:1px solid var(--line); border-radius:13px; padding:0 15px 0 45px; font-size:14px; color:var(--ink); background:#fbfcfb; outline:none; transition:.2s; }
-    input:focus { border-color:#4b9a76; background:#fff; box-shadow:0 0 0 4px rgba(11,81,56,.08); }
+    input:focus, select:focus { border-color:#4b9a76; background:#fff; box-shadow:0 0 0 4px rgba(11,81,56,.08); }
     .password-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); border:0; background:transparent; color:#738078; cursor:pointer; font-size:12px; padding:7px; }
     .password-toggle:focus-visible { outline:2px solid var(--green); border-radius:6px; }
     .remember input { width:15px; height:15px; padding:0; accent-color:var(--green); }
@@ -159,6 +159,17 @@
 
       <form id="loginForm">
         <div class="field">
+          <label for="accountType">Account type</label>
+          <div class="input-wrap">
+            <span class="field-icon">▤</span>
+            <select id="accountType" name="accountType" required style="width:100%;height:53px;border:1px solid var(--line);border-radius:13px;padding:0 15px 0 45px;font-size:14px;color:var(--ink);background:#fbfcfb;outline:none;">
+              <option value="" selected disabled>Select your account type</option>
+              <option value="admin">Admin / Super Admin</option>
+              <option value="agent">Election Agent</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
           <label for="username">Username</label>
           <div class="input-wrap"><span class="field-icon">♙</span><input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your assigned username" required /></div>
         </div>
@@ -180,13 +191,10 @@
     </section>
   </main>
 
-  <!-- Firebase setup:
-       1) Replace the placeholder values below with your Firebase project config.
-       2) Enable Email/Password in Firebase Authentication.
-       3) Create Firestore collection "users"; each user's document ID should be their Firebase Auth UID.
-       4) Store a role field, e.g. "admin", "observer", "coordinator", "reporter".
-       5) Adjust the role-to-dashboard paths below to match your future HTML filenames.
-       Username is checked against Firestore profile after authentication. -->
+  <!-- Firebase login routing:
+       Admin / Super Admin profiles are read only from users/{uid}.
+       Election Agent profiles are read only from electionAgents/{uid}.
+       Username is checked against the selected account profile after authentication. -->
   <script>
     // The eye logo is decorative; Super Admin access is selected by the
     // authenticated account role after signing in through this main index.
@@ -237,6 +245,7 @@
     };
 
     const form = document.getElementById("loginForm");
+    const accountTypeInput = document.getElementById("accountType");
     const usernameInput = document.getElementById("username");
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
@@ -265,9 +274,18 @@
       loginButton.disabled = true;
       loginButton.textContent = "Signing in…";
 
+      const accountType = accountTypeInput.value;
       const username = usernameInput.value.trim().toLowerCase();
       const email = emailInput.value.trim().toLowerCase();
       const password = passwordInput.value;
+
+      if (!accountType) {
+        showStatus("Please select your account type before signing in.", "error");
+        loginButton.disabled = false;
+        loginButton.textContent = "Sign in securely  →";
+        accountTypeInput.focus();
+        return;
+      }
 
       try {
         // Keep the authenticated session available when the browser moves
@@ -276,31 +294,44 @@
         const credential = await signInWithEmailAndPassword(auth, email, password);
         const uid = credential.user.uid;
 
-        // GreenEyes account architecture:
-        // Super Admin profile: users/{uid}
-        // Every election agent profile: electionAgents/{uid} only.
-        const userSnap = await getDoc(doc(db, "users", uid));
-        const userProfile = userSnap.exists() ? userSnap.data() : null;
+        // Account type determines the ONLY collection that is checked.
+        // Admin / Super Admin: users/{uid}.
+        // Election Agent: electionAgents/{uid}.
         let role = "";
         let dashboard = "";
         let accountProfile = null;
 
-        if (userProfile && String(userProfile.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_") === "super_admin") {
-          accountProfile = userProfile;
-          role = "super_admin";
+        if (accountType === "admin") {
+          const adminSnap = await getDoc(doc(db, "users", uid));
+          if (!adminSnap.exists()) {
+            await auth.signOut();
+            throw new Error("No Admin / Super Admin profile was found in users for this account.");
+          }
+
+          accountProfile = adminSnap.data();
+          role = String(accountProfile.role || "")
+            .trim().toLowerCase().replace(/[\s-]+/g, "_");
+          if (role !== "admin" && role !== "super_admin") {
+            await auth.signOut();
+            throw new Error("This account is not registered as an Admin / Super Admin in users.");
+          }
           dashboard = "admin-dashboard.html";
-        } else {
+        } else if (accountType === "agent") {
           const agentSnap = await getDoc(doc(db, "electionAgents", uid));
           if (!agentSnap.exists()) {
             await auth.signOut();
-            throw new Error("No GreenEyes Super Admin or election-agent profile was found for this account.");
+            throw new Error("No Election Agent profile was found in electionAgents for this account.");
           }
+
           accountProfile = agentSnap.data();
           role = String(accountProfile.agentRole || accountProfile.role || "")
             .trim().toLowerCase().replace(/[\s-]+/g, "_");
           // Prefer the local role map over any stale/custom URL stored in the
-          // profile, so polling_unit_agent always opens the intended HTML file.
+          // profile, so each agent role opens its configured dashboard.
           dashboard = roleDashboards[role] || accountProfile.dashboardUrl || "";
+        } else {
+          await auth.signOut();
+          throw new Error("Invalid account type. Please select Admin / Super Admin or Election Agent.");
         }
 
         const storedUsername = String(accountProfile.username || "").trim().toLowerCase();
