@@ -81,7 +81,7 @@
 
 <div class="panel">
 <h2>1. Create State / FCT</h2>
-<p class="desc">Paste state names below, one state per line, then create records.</p>
+<p class="desc">Paste the 36 states in alphabetical order, one per line. Codes are assigned automatically: 01–36; Federal Capital Territory (FCT) / Abuja receives 37 and is always last.</p>
 <form id="geoStateForm">
 <div class="field"><label for="geoStateNames">State names</label><textarea id="geoStateNames" rows="7" placeholder="Abia State&#10;Adamawa State&#10;Akwa Ibom State"></textarea></div>
 <div class="actions"><button class="btn primary" id="geoStateSave">Create Records</button><button class="btn secondary" type="reset">Clear Form</button></div>
@@ -320,7 +320,7 @@ function parentMatches(record, field, selectedCode){
 async function loadStates(){
   try{
     geoCache.states=await fetchCollection('geographyStates');
-    geoCache.states.sort((a,b)=>recordName(a).localeCompare(recordName(b)));
+    geoCache.states.sort(compareStateCodes);
     fill($('stateSelect'),geoCache.states,'Select State',recordName);
     if(!geoCache.states.length){
       notice('agentNotice','No state records exist in geographyStates yet. Open Geographical Administration, import the States sheet first, then import LGAs, Wards, and Polling Units in that order.','info');
@@ -553,7 +553,7 @@ $('electionType').addEventListener('change',refreshAgentCandidateOptions);
 const geoManageCollections={geographyStates:{label:'States / FCT'},geographyLGAs:{label:'Local Government Areas'},geographyWards:{label:'Wards'},geographyPollingUnits:{label:'Polling Units'},geographySenatorialZones:{label:'Senatorial Zones'},geographyFederalConstituencies:{label:'Federal Constituencies'}};
 function geoManageType(){return $('geoManageType').value}
 function geoManageParentVisibility(){const t=geoManageType();$('geoManageState').parentElement.style.display=['geographyStates'].includes(t)?'none':'block';$('geoManageLgaWrap').style.display=['geographyWards','geographyPollingUnits'].includes(t)?'block':'none';$('geoManageWardWrap').style.display=t==='geographyPollingUnits'?'block':'none';}
-async function initGeoManage(){geoManageParentVisibility();const states=await fetchCollection('geographyStates');states.sort((a,b)=>recordName(a).localeCompare(recordName(b)));fill($('geoManageState'),states,'Select State',recordName);fill($('geoManageLga'),[],'Select State first');fill($('geoManageWard'),[],'Select LGA first');}
+async function initGeoManage(){geoManageParentVisibility();const states=await fetchCollection('geographyStates');states.sort(compareStateCodes);fill($('geoManageState'),states,'Select State',recordName);fill($('geoManageLga'),[],'Select State first');fill($('geoManageWard'),[],'Select LGA first');}
 async function geoManageLoadLgas(){const state=$('geoManageState').value;const lgas=state?await getParentRecords('geographyLGAs','stateCode',state):[];fill($('geoManageLga'),lgas,'All LGAs',recordName);fill($('geoManageWard'),[],'Select LGA first');}
 async function geoManageLoadWards(){const lga=$('geoManageLga').value;const wards=lga?await getParentRecords('geographyWards','lgaCode',lga):[];fill($('geoManageWard'),wards,'All Wards',recordName);}
 function geoManageParentMatches(r,t){const state=$('geoManageState').value,lga=$('geoManageLga').value,ward=$('geoManageWard').value;if(t==='geographyLGAs')return !state||String(r.stateCode||'')===state;if(t==='geographyWards')return (!state||String(r.stateCode||'')===state)&&(!lga||String(r.lgaCode||'')===lga);if(t==='geographyPollingUnits')return (!state||String(r.stateCode||'')===state)&&(!lga||String(r.lgaCode||'')===lga)&&(!ward||String(r.wardCode||'')===ward);if(t==='geographySenatorialZones'||t==='geographyFederalConstituencies')return !state||String(r.stateCode||'')===state;return true;}
@@ -611,7 +611,7 @@ function fillParentOptions(selectId,records,placeholder){
 }
 async function reloadGeoStateOptions(){
   const states=await fetchCollection('geographyStates');
-  states.sort((a,b)=>recordName(a).localeCompare(recordName(b)));
+  states.sort(compareStateCodes);
   geoCache.states=states;
   ['geoLgaState','geoWardState','geoPuState'].forEach(id=>populateStates(id));
 }
@@ -631,6 +631,43 @@ async function reloadGeoPuWards(){
   const wards=lgaId?await getParentRecords('geographyWards','lgaCode',lgaId):[];
   fillParentOptions('geoPuWard',wards,'Select Ward');
 }
+
+const NIGERIA_STATE_ORDER = [
+  'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno',
+  'Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','Gombe','Imo','Jigawa',
+  'Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger',
+  'Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'
+];
+
+function normalizeNigeriaStateName(value){
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g,' ')
+    .replace(/\s+state$/i,'')
+    .replace(/\s*\(fct\)\s*/i,'')
+    .toLowerCase();
+}
+
+function getNigeriaStateCode(name){
+  const normalized=normalizeNigeriaStateName(name);
+  if(normalized==='federal capital territory' || normalized==='abuja' || normalized==='fct') return '37';
+  const index=NIGERIA_STATE_ORDER.findIndex(s=>s.toLowerCase()===normalized);
+  if(index<0) throw new Error('Unrecognised Nigerian state name: '+name);
+  return String(index+1).padStart(2,'0');
+}
+
+function getNigeriaStateDisplayName(name){
+  const normalized=normalizeNigeriaStateName(name);
+  if(normalized==='federal capital territory' || normalized==='abuja' || normalized==='fct')
+    return 'Federal Capital Territory (FCT)';
+  const found=NIGERIA_STATE_ORDER.find(s=>s.toLowerCase()===normalized);
+  return found ? found+' State' : String(name).trim();
+}
+
+function compareStateCodes(a,b){
+  return Number(a.code||999)-Number(b.code||999) || recordName(a).localeCompare(recordName(b));
+}
+
 function serialCode(records){
   const used=new Set(records.map(r=>String(r.code||'').trim()).filter(c=>/^\d{3,}$/.test(c)));
   let n=1;
@@ -666,17 +703,51 @@ async function createGeoBatch({formId,namesId,noticeId,collectionName,level,pare
     const errors=[];
 
     for(const name of names){
-      const duplicate=all.some(r=>
+      const duplicateRecord=all.find(r=>
         recordName(r).trim().toLowerCase()===name.trim().toLowerCase() &&
         belongsToSelectedParent(r,parentId,parentField));
-      if(duplicate){skipped++;continue;}
+      if(duplicateRecord){
+        if(collectionName==='geographyStates'){
+          try{
+            const existingCode=getNigeriaStateCode(name);
+            const existingName=getNigeriaStateDisplayName(name);
+            await updateDoc(doc(db,collectionName,duplicateRecord.id),{
+              code:existingCode,
+              name:existingName,
+              updatedAt:serverTimestamp()
+            });
+            duplicateRecord.code=existingCode;
+            duplicateRecord.name=existingName;
+            skipped++;
+          }catch(updateError){
+            failed++;
+            errors.push(name+': could not assign state code — '+(updateError?.message||String(updateError)));
+          }
+        }else{
+          skipped++;
+        }
+        continue;
+      }
 
-      const code=serialCode(scoped);
-      const docId=makeDocId(level,parentId,code);
+      let code, docId, savedName=name;
+      if(collectionName==='geographyStates'){
+        code=getNigeriaStateCode(name);
+        savedName=getNigeriaStateDisplayName(name);
+        docId='STATE_'+code;
+        const sameCode=all.find(r=>String(r.code||'')===code && String(r.id)!==docId);
+        if(sameCode){
+          errors.push(name+': code '+code+' is already assigned to '+recordName(sameCode));
+          failed++;
+          continue;
+        }
+      } else {
+        code=serialCode(scoped);
+        docId=makeDocId(level,parentId,code);
+      }
       if(all.some(r=>String(r.id)===docId)){skipped++;continue;}
 
       const record={
-        code,name,
+        code,name:savedName,
         createdBy:auth.currentUser.uid,
         createdAt:serverTimestamp(),
         updatedAt:serverTimestamp(),
@@ -687,7 +758,7 @@ async function createGeoBatch({formId,namesId,noticeId,collectionName,level,pare
 
       try{
         await setDoc(doc(db,collectionName,docId),record);
-        const saved={id:docId,code,name,...record};
+        const saved={id:docId,code,name:savedName,...record};
         created++;
         scoped.push(saved);
         all.push(saved);
