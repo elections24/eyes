@@ -1,76 +1,86 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // =====================================================
-    // THE EYES — Super Admin identity
-    // Super Admin is created manually in Firebase Auth and
-    // users/{uid}. Election agents are stored only in
-    // electionAgents/{uid}; never duplicate them in users.
-    // =====================================================
-
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function adminPath() {
-      return /databases/$(database)/documents/users/$(request.auth.uid);
-    }
-
+    function signedIn() { return request.auth != null; }
+    function agentPath(uid) { return /databases/$(database)/documents/electionAgents/$(uid); }
+    function hasAgent(uid) { return signedIn() && exists(agentPath(uid)); }
+    function agentData(uid) { return get(agentPath(uid)).data; }
     function isSuperAdmin() {
       return signedIn()
-        && exists(adminPath())
-        && get(adminPath()).data.role == 'super_admin'
-        && get(adminPath()).data.status == 'active'
-        && get(adminPath()).data.active != false;
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+    function isActiveAgent(uid, role) {
+      return hasAgent(uid)
+        && agentData(uid).status == 'active'
+        && agentData(uid).agentRole == role;
+    }
+    function puAssignmentMatches(data) {
+      return isActiveAgent(request.auth.uid, 'polling_unit_agent')
+        && data.agentUid == request.auth.uid
+        && data.agentRole == 'polling_unit_agent'
+        && data.candidateId == agentData(request.auth.uid).candidateId
+        && data.electionType == agentData(request.auth.uid).electionType
+        && data.stateCode == agentData(request.auth.uid).geography.stateCode
+        && data.lgaCode == agentData(request.auth.uid).geography.lgaCode
+        && data.wardCode == agentData(request.auth.uid).geography.wardCode
+        && data.pollingUnitCode == agentData(request.auth.uid).geography.pollingUnitCode;
+    }
+    function wardCanRead(data) {
+      return isActiveAgent(request.auth.uid, 'ward_collation_agent')
+        && data.candidateId == agentData(request.auth.uid).candidateId
+        && data.electionType == agentData(request.auth.uid).electionType
+        && data.stateCode == agentData(request.auth.uid).geography.stateCode
+        && data.lgaCode == agentData(request.auth.uid).geography.lgaCode
+        && data.wardCode == agentData(request.auth.uid).geography.wardCode;
     }
 
-    // Super Admin profile only. It is provisioned manually.
     match /users/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
       allow list: if isSuperAdmin();
       allow create, update, delete: if false;
     }
-
-    // One profile per agent UID. Agents can read their own profile;
-    // only the Super Admin can list/manage all agent profiles.
     match /electionAgents/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
       allow list: if isSuperAdmin();
       allow create, update, delete: if isSuperAdmin();
     }
+    match /candidates/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographyStates/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographyLGAs/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographyWards/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographyPollingUnits/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographySenatorialZones/{id} { allow read, write: if isSuperAdmin(); }
+    match /geographyFederalConstituencies/{id} { allow read, write: if isSuperAdmin(); }
 
-    // Candidate master records: create, list, edit and activate/deactivate.
-    match /candidates/{candidateId} {
-      allow read, create, update, delete: if isSuperAdmin();
+    // Polling Unit submissions: agent creates only for their own exact assignment;
+    // assigned Ward Agent can read child records for the same election/ward.
+    match /ec8aResults/{id} {
+      allow create: if puAssignmentMatches(request.resource.data);
+      allow get, list: if isSuperAdmin() || (signedIn() && resource.data.agentUid == request.auth.uid) || wardCanRead(resource.data);
+      allow update, delete: if isSuperAdmin();
     }
-
-    // Geographical master data managed by the Super Admin.
-    // These match the collections used by the dashboard.
-    match /geographyStates/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
+    match /evidenceUploads/{id} {
+      allow create: if puAssignmentMatches(request.resource.data);
+      allow get, list: if isSuperAdmin() || (signedIn() && resource.data.agentUid == request.auth.uid) || wardCanRead(resource.data);
+      allow update, delete: if isSuperAdmin();
     }
-    match /geographyLGAs/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
+    match /pollingUnitReports/{id} {
+      allow create: if puAssignmentMatches(request.resource.data);
+      allow get, list: if isSuperAdmin() || (signedIn() && resource.data.agentUid == request.auth.uid) || wardCanRead(resource.data);
+      allow update, delete: if isSuperAdmin();
     }
-    match /geographyWards/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
+    match /backupRequests/{id} {
+      allow create: if puAssignmentMatches(request.resource.data);
+      allow get, list: if isSuperAdmin() || (signedIn() && resource.data.agentUid == request.auth.uid);
+      allow update, delete: if isSuperAdmin();
     }
-    match /geographyPollingUnits/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
+    match /voteBuyingAlerts/{id} {
+      allow create: if puAssignmentMatches(request.resource.data);
+      allow get, list: if isSuperAdmin() || (signedIn() && resource.data.agentUid == request.auth.uid) || wardCanRead(resource.data);
+      allow update, delete: if isSuperAdmin();
     }
-    match /geographySenatorialZones/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
-    }
-    match /geographyFederalConstituencies/{recordId} {
-      allow read, create, update, delete: if isSuperAdmin();
-    }
-
-    // All unlisted collections stay closed until their own
-    // role- and election-scope rules are explicitly defined.
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
