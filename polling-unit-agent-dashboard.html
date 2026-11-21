@@ -627,7 +627,29 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 async function logout(){
   try{await signOut(auth)}finally{window.location.replace("index.html")}
 }
-onAuthStateChanged(auth,async user=>{
+
+// Wait until Firebase has completed restoring the persisted browser session
+// before subscribing to auth changes or showing a missing-session diagnostic.
+async function startAuthenticationListener(){
+  setDiagnosticStage("Waiting for Firebase to restore the saved authentication session");
+  try{
+    await auth.authStateReady();
+    console.info("[PU Agent diagnostic] Firebase initial auth state is ready",{
+      projectId:firebaseConfig.projectId,
+      hasCurrentUser:!!auth.currentUser,
+      uid:auth.currentUser?.uid||null
+    });
+  }catch(error){
+    console.error("[PU Agent diagnostic] Firebase auth initialisation failed",error);
+    showAuthDiagnostic(
+      "Firebase authentication could not initialise",
+      "The dashboard could not complete Firebase's initial authentication-state restoration.",
+      "Stage: "+diagnosticStage+"\nFirebase project: "+firebaseConfig.projectId+"\nError code: "+(error?.code||"Not supplied")+"\nError message: "+(error?.message||String(error))
+    );
+    return;
+  }
+
+  onAuthStateChanged(auth,async user=>{
   if(!user){
     console.error("[PU Agent diagnostic] Firebase reports no authenticated user on the dashboard.");
     showAuthDiagnostic(
@@ -653,8 +675,9 @@ onAuthStateChanged(auth,async user=>{
     // Deliberately do not call signOut() or redirect. Keep the authenticated session
     // available so the actual failure can be diagnosed without forcing another login.
   }
-});
-
+  });
+}
+startAuthenticationListener();
 
 // Cloudinary unsigned uploads for the three Successful Election evidence types.
 const CLOUDINARY_CLOUD_NAME="hjdnytcb";
