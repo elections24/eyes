@@ -302,7 +302,7 @@ async function loadProfile(u){
   if(!ag.exists())throw Error('No electionAgents profile was found for this account. Ask the Super Admin to create the Ward Collation Agent profile.');
   agent=ag.data()||{};
   profile=agent;
-  const role=String(first(agent.agentRole,agent.role,'')).trim().toLowerCase().replace(/[\\s-]+/g,'_');
+  const role=String(first(agent.agentRole,agent.role,'')).trim().toLowerCase().replace(/[\s-]+/g,'_');
   if(!['ward_collation_agent','ward_collation'].includes(role))throw Error('This account is not registered as a Ward Collation Agent.');
   if(agent.active===false||String(agent.status||'').toLowerCase()==='disabled')throw Error('This account is disabled. Contact the Super Admin.');
   const stateCode=String(getVal('stateCode')||'');
@@ -1016,6 +1016,30 @@ $('puDashboardFilter')?.addEventListener('change',renderEc8aComparison);
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.filter){activeSubmissionType=b.dataset.filter;activeSubmissionPuCode='';renderSubmissions()}switchView(b.dataset.go)}));$('homeLogoutBtn').addEventListener('click',logout);if($('topBackBtn'))$('topBackBtn').addEventListener('click',wardGoBack);document.addEventListener('click',e=>{const action=e.target.closest('[data-pu-action]');if(action){openPuView(action.dataset.puCode,action.dataset.puAction);return}const status=e.target.closest('[data-pu-status]');if(status){openPuStatus(status.dataset.puStatus);return}const pu=e.target.closest('[data-pu-view]');if(pu){openPuView(pu.dataset.puView);return}const b=e.target.closest('[data-detail]');if(b){const [c,id]=b.dataset.detail.split(':');openDetail(c,id)}});$('closeDetail').addEventListener('click',()=>{$('detailModal').classList.remove('show');syncBackButton()});$('detailModal').addEventListener('click',e=>{if(e.target===$('detailModal')){$('detailModal').classList.remove('show');syncBackButton()}});
 $('collationForm').addEventListener('submit',async e=>{e.preventDefault();const btn=$('saveCollationBtn');btn.disabled=true;btn.textContent='Saving…';try{if(!user||!assignment.wardCode)throw Error('Your assigned ward is not loaded.');const source=allSubmissions();const sourceIds=source.map(x=>({collection:x._collection,id:x.id}));const payload={recordType:'ward_collation',createdBy:user.uid,createdByName:first(profile.fullName,agent.fullName,user.displayName,user.email),createdAt:serverTimestamp(),collationDate:$('collationDate').value,reviewStatus:$('collationStatus').value,status:'submitted',electionType:assignment.electionType,electionName:assignment.electionName,stateCode:assignment.stateCode,lgaCode:assignment.lgaCode,wardCode:assignment.wardCode,state:assignment.state,lga:assignment.lga,ward:assignment.ward,sourceCounts:{ec8a:data.ec8a.length,evidence:data.evidence.length,reports:data.reports.length,voteBuyingAlerts:data.alerts.length,backupRequests:data.backups.length,total:source.length},sourceSubmissionIds:sourceIds,wardTotals:{validVotes:$('totalValidVotes').value===''?null:Number($('totalValidVotes').value),rejectedBallots:$('totalRejectedVotes').value===''?null:Number($('totalRejectedVotes').value)},summary:$('collationSummary').value.trim(),discrepancies:$('discrepancies').value.trim(),sourceReviewed:$('sourceReviewed').checked,missingDeclared:$('missingDeclared').checked};await addDoc(collection(db,'wardCollations'),payload);notice('collationNotice','Ward collation record saved successfully. Source submissions remain unchanged.');$('collationForm').reset();}catch(err){console.error(err);notice('collationNotice',err.code==='permission-denied'?'Firebase denied this save. Firestore Rules must permit assigned Ward Collation Agents to create wardCollations records scoped to their ward.':`Could not save ward collation: ${err.message||err}`,true)}finally{btn.disabled=false;btn.textContent='Save ward collation'}});
 
-async function logout(){unsubs.forEach(f=>f());unsubs=[];listenersStarted=false;await signOut(auth);window.location.replace('index.html')} 
-onAuthStateChanged(auth,async u=>{if(!u){$('appScreen').classList.add('hidden');window.location.replace('index.html');return}try{await loadProfile(u)}catch(err){console.error('Ward dashboard startup failed:',err);$('appScreen').classList.remove('hidden');const content=document.querySelector('.content');if(content){content.innerHTML='<div class="panel"><h2>Unable to load Ward Collation Dashboard</h2><p class="sub" id="startupError"></p><button class="btn" id="returnLoginBtn" type="button">Return to login</button></div>';const msg=document.getElementById('startupError');if(msg)msg.textContent=err?.message||'An unexpected startup error occurred.';document.getElementById('returnLoginBtn')?.addEventListener('click',async()=>{await signOut(auth);window.location.replace('index.html')})}}});
+async function logout(){unsubs.forEach(f=>f());unsubs=[];listenersStarted=false;await signOut(auth);window.location.replace('index.html')}
+async function startWardDashboard(){
+  // Wait until Firebase has restored browserSessionPersistence from the login page.
+  // A premature null auth state must not send a valid Ward Agent back to login.
+  try{await auth.authStateReady()}catch(err){console.error('Firebase auth initialization failed:',err)}
+  const restoredUser=auth.currentUser;
+  if(!restoredUser){
+    $('appScreen').classList.add('hidden');
+    window.location.replace('index.html');
+    return;
+  }
+  try{
+    await loadProfile(restoredUser);
+  }catch(err){
+    console.error('Ward dashboard startup failed:',err);
+    $('appScreen').classList.remove('hidden');
+    const content=document.querySelector('.content');
+    if(content){
+      content.innerHTML='<div class="panel"><h2>Unable to load Ward Collation Dashboard</h2><p class="sub" id="startupError"></p><button class="btn" id="returnLoginBtn" type="button">Return to login</button></div>';
+      const msg=document.getElementById('startupError');
+      if(msg)msg.textContent=err?.message||'An unexpected startup error occurred.';
+      document.getElementById('returnLoginBtn')?.addEventListener('click',async()=>{await signOut(auth);window.location.replace('index.html')});
+    }
+  }
+}
+startWardDashboard();
 </script></body></html>
