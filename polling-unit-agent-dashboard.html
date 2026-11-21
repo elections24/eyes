@@ -126,7 +126,7 @@ h1{font-size:clamp(28px,3.5vw,44px);letter-spacing:-1.2px;margin:8px 0 10px;line
 <div class="app">
 <aside class="sidebar" id="sidebar">
   <div class="brand"><span class="brand-mark"><svg viewBox="0 0 64 64" fill="none"><path d="M5 32C12 20 21 14 32 14s20 6 27 18C52 44 43 50 32 50S12 44 5 32Z" stroke="#08734f" stroke-width="4"/><circle cx="32" cy="32" r="11" stroke="#dcae43" stroke-width="4"/><circle cx="32" cy="32" r="4" fill="#08734f"/></svg></span> THE EYES</div>
-  <div class="profile-mini"><div class="caption">Temporary test role</div><strong id="sideRole">Polling Unit Agent</strong><small id="sideLocation">Loading assigned location…</small></div>
+  <div class="profile-mini"><div class="caption">Authenticated role</div><strong id="sideRole">Polling Unit Agent</strong><small id="sideLocation">Loading assigned location…</small></div>
   <nav class="nav">
     <button class="active" data-view="dashboard"><span class="nav-icon">▦</span> Dashboard</button>
     <button data-view="upload"><span class="nav-icon">↑</span> Upload</button>
@@ -144,37 +144,12 @@ h1{font-size:clamp(28px,3.5vw,44px);letter-spacing:-1.2px;margin:8px 0 10px;line
   <div class="top-actions"><span class="tag">Polling unit agent portal</span></div>
 </header>
 <div class="content">
-<section class="panel" id="demoAgentSetup" style="margin-bottom:18px;border:2px solid #d6e9dd">
-  <div class="role-label">Temporary test mode · No login</div>
-  <h2 style="margin:0 0 6px">Create / edit test Polling Unit Agent</h2>
-  <p class="desc">Enter a sample agent and assignment. This is stored only in this browser for testing; it does not create a Firebase account or write to Firestore.</p>
-  <form id="demoAgentForm" class="form-grid">
-    <div class="field"><label for="demoName">Agent full name</label><input id="demoName" required value="Test Polling Unit Agent"></div>
-    <div class="field"><label for="demoUsername">Username</label><input id="demoUsername" required value="test-pu-agent"></div>
-    <div class="field"><label for="demoEmail">Email (optional)</label><input id="demoEmail" type="email" value="test-agent@example.com"></div>
-    <div class="field"><label for="demoPhone">Phone (optional)</label><input id="demoPhone" value=""></div>
-    <div class="field"><label for="demoElection">Election</label><select id="demoElection"><option value="presidential">Presidential Election</option><option value="gubernatorial">Gubernatorial Election</option><option value="senatorial">Senatorial Election</option><option value="house_of_representatives">House of Representatives Election</option></select></div>
-    <div class="field"><label for="demoCandidate">Candidate name</label><input id="demoCandidate" required value="Test Candidate"></div>
-    <div class="field"><label for="demoCandidateId">Candidate ID</label><input id="demoCandidateId" required value="TEST-CANDIDATE-001"></div>
-    <div class="field"><label for="demoState">State</label><input id="demoState" required value="Zamfara"></div>
-    <div class="field"><label for="demoStateCode">State code</label><input id="demoStateCode" required value="ZA"></div>
-    <div class="field"><label for="demoLga">Local Government</label><input id="demoLga" required value="Gusau"></div>
-    <div class="field"><label for="demoLgaCode">LGA code</label><input id="demoLgaCode" required value="GUS"></div>
-    <div class="field"><label for="demoWard">Ward</label><input id="demoWard" required value="Mayana"></div>
-    <div class="field"><label for="demoWardCode">Ward code</label><input id="demoWardCode" required value="MAY"></div>
-    <div class="field"><label for="demoPollingUnit">Polling Unit name</label><input id="demoPollingUnit" required value="Mayana Primary School"></div>
-    <div class="field"><label for="demoPollingUnitCode">Polling Unit code</label><input id="demoPollingUnitCode" required value="TEST-PU-001"></div>
-    <div class="field full" style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="submit">Save test agent and open dashboard</button><button class="btn secondary" type="button" id="demoReset">Reset sample data</button></div>
-  </form>
-  <div id="demoAgentSaved" class="notice"></div>
-  <div class="notice show" style="background:#fff8e8;color:#775313">DEMO MODE: Firebase Authentication and Firestore are disabled in this file. Submissions are saved in this browser's local storage only. Cloudinary file uploads remain separate.</div>
-</section>
 <section class="view-section active" id="view-dashboard">
   <div class="role-label">Polling Unit Agent</div>
   <h1>Welcome, <span id="welcomeName">…</span>.</h1>
   <p class="subtitle">Your assigned polling unit operations and reporting workspace.</p>
   <div class="assigned-card">
-    <div class="label">Assigned context · Entered in the temporary test profile</div>
+    <div class="label">Assigned context · Verified from your Super Admin agent profile</div>
     <h3 id="assignedUnit">Loading assigned polling unit…</h3>
     <p id="assignedAddress">Loading ward, local government and state…</p>
     <div class="context-grid">
@@ -444,7 +419,7 @@ h1{font-size:clamp(28px,3.5vw,44px);letter-spacing:-1.2px;margin:8px 0 10px;line
     <div class="profile-item"><small>Ward</small><strong id="profileWard">—</strong></div>
     <div class="profile-item"><small>Polling unit</small><strong id="profilePollingUnit">—</strong></div>
     <div class="profile-item"><small>Polling unit code</small><strong id="profilePollingUnitCode">—</strong></div>
-    <div class="profile-item"><small>Test status</small><strong id="profileStatus">—</strong></div>
+    <div class="profile-item"><small>Account status</small><strong id="profileStatus">—</strong></div>
   </div></div>
 </section>
 <div class="footer">THE EYES · Election Monitoring &amp; Reporting System</div>
@@ -453,14 +428,14 @@ h1{font-size:clamp(28px,3.5vw,44px);letter-spacing:-1.2px;margin:8px 0 10px;line
 </div>
 
 <script type="module">
-// TEMPORARY POLLING UNIT DEMO MODE: no Firebase SDK, no Authentication, no Firestore.
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {initializeFirestore,doc,getDoc,collection,addDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig={apiKey:"AIzaSyDnAbVvDDb4KLIoSOfHsHjZVMWdOpsX_U",authDomain:"eyes-e5118.firebaseapp.com",projectId:"eyes-e5118",storageBucket:"eyes-e5118.firebasestorage.app",messagingSenderId:"61202711621",appId:"1:61202711621:web:f24b59206dba914f8c8f2c"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{experimentalForceLongPolling:true});
 const $=id=>document.getElementById(id);
-const db={demo:true};
-const collection=(_db,name)=>name;
-const serverTimestamp=()=>new Date().toISOString();
 let currentUser=null,currentProfile=null,currentAgent=null,assignment={};
-function readDemoRecords(name){try{return JSON.parse(localStorage.getItem("eyes_demo_"+name)||"[]")}catch(_){return []}}
-function addCleanDoc(collectionName,data){const rows=readDemoRecords(collectionName);const record={...data,id:"DEMO-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),demoOnly:true,createdAt:data.createdAt||new Date().toISOString()};rows.push(record);localStorage.setItem("eyes_demo_"+collectionName,JSON.stringify(rows));return Promise.resolve({id:record.id})}
 
 const electionNames={presidential:"Presidential Election",gubernatorial:"Gubernatorial Election",senatorial:"Senatorial Election",house_of_representatives:"House of Representatives Election"};
 const roleNames={polling_unit_agent:"Polling Unit Agent",agent:"Election Agent",observer:"Polling Unit Agent"};
@@ -479,7 +454,7 @@ function stripUndefined(value){
   }
   return value;
 }
-
+function addCleanDoc(collectionRef,data){return addDoc(collectionRef,stripUndefined(data))}
 function first(...values){return values.find(v=>v!==undefined&&v!==null&&String(v).trim()!=="")}
 function asText(v){return typeof v==="string"?v:(v==null?"":String(v))}
 function getNested(obj,path){return path.split(".").reduce((v,k)=>v&&v[k]!==undefined?v[k]:undefined,obj)}
@@ -509,16 +484,32 @@ function agentCandidateName(){
 function normalStatus(p){return p?.active===false||p?.status==="disabled"?"Disabled":(p?.status||"Active")}
 function roleText(p){return p?.agentRoleLabel||roleNames[p?.agentRole]||roleNames[p?.role]||p?.role||"Polling Unit Agent"}
 
+async function readGeoDoc(collectionName,id){
+  if(!id)return null;
+  try{const snap=await getDoc(doc(db,collectionName,String(id)));return snap.exists()?{id:snap.id,...snap.data()}:null}
+  catch(e){console.warn("Could not resolve "+collectionName,e);return null}
+}
+function recordName(record){return first(record?.name,record?.stateName,record?.lgaName,record?.wardName,record?.pollingUnitName,record?.unitName,record?.title,record?.label)}
 async function hydrateAssignment(){
-  const g=currentAgent?.geography||{};
+  const stateCode=geoValue("stateCode","stateCode"),zoneCode=geoValue("senatorialZoneCode","senatorialZoneCode"),constCode=geoValue("federalConstituencyCode","federalConstituencyCode"),lgaCode=geoValue("lgaCode","lgaCode"),wardCode=geoValue("wardCode","wardCode"),puCode=geoValue("pollingUnitCode","pollingUnitCode");
+  const [stateDoc,zoneDoc,constDoc,lgaDoc,wardDoc,puDoc]=await Promise.all([
+    readGeoDoc("geographyStates",stateCode),readGeoDoc("geographySenatorialZones",zoneCode),readGeoDoc("geographyFederalConstituencies",constCode),
+    readGeoDoc("geographyLGAs",lgaCode),readGeoDoc("geographyWards",wardCode),readGeoDoc("geographyPollingUnits",puCode)
+  ]);
+  const storedGeo=currentAgent?.geography||{};
   assignment={
-    state:first(g.state,currentAgent?.state),stateCode:first(g.stateCode,currentAgent?.stateCode),
-    senatorialZone:first(g.senatorialZone,currentAgent?.senatorialZone),senatorialZoneCode:first(g.senatorialZoneCode,currentAgent?.senatorialZoneCode),
-    federalConstituency:first(g.federalConstituency,currentAgent?.federalConstituency),federalConstituencyCode:first(g.federalConstituencyCode,currentAgent?.federalConstituencyCode),
-    lga:first(g.lga,currentAgent?.lga),lgaCode:first(g.lgaCode,currentAgent?.lgaCode),
-    ward:first(g.ward,currentAgent?.ward),wardCode:first(g.wardCode,currentAgent?.wardCode),
-    pollingUnit:first(g.pollingUnit,g.pollingUnitName,currentAgent?.pollingUnit,currentAgent?.pollingUnitName),
-    pollingUnitCode:first(g.pollingUnitCode,currentAgent?.pollingUnitCode)
+    state:first(storedGeo.state,storedGeo.stateName,currentAgent?.state,recordName(stateDoc)),
+    stateCode,
+    senatorialZone:first(storedGeo.senatorialZone,currentAgent?.senatorialZone,currentProfile?.senatorialZone,recordName(zoneDoc)),
+    senatorialZoneCode:zoneCode,
+    federalConstituency:first(storedGeo.federalConstituency,currentAgent?.federalConstituency,currentProfile?.federalConstituency,recordName(constDoc)),
+    federalConstituencyCode:constCode,
+    lga:first(storedGeo.lga,currentAgent?.lga,recordName(lgaDoc)),
+    lgaCode,
+    ward:first(storedGeo.ward,currentAgent?.ward,currentProfile?.ward,recordName(wardDoc)),
+    wardCode,
+    pollingUnit:first(storedGeo.pollingUnit,storedGeo.pollingUnitName,currentAgent?.pollingUnit,currentAgent?.pollingUnitName,currentProfile?.pollingUnit,currentProfile?.pollingUnitName,recordName(puDoc)),
+    pollingUnitCode:first(puCode,puDoc?.code,puDoc?.serialCode,puDoc?.pollingUnitCode)
   };
 }
 function displayAssignment(){
@@ -552,20 +543,21 @@ function displayAssignment(){
   text("profilePollingUnitCode",assignment.pollingUnitCode);
   text("profileStatus",normalStatus(currentAgent||currentProfile));
 }
-function applyDemoAgent(data){
-  currentAgent=data;currentProfile=data;
-  currentUser={uid:"DEMO-POLLING-UNIT-AGENT",displayName:data.fullName,email:data.email||""};
-  assignment={...data.geography};
+async function loadAuthenticatedProfile(user){
+  currentUser=user;
+  const agentSnap=await getDoc(doc(db,"electionAgents",user.uid));
+  if(!agentSnap.exists())throw new Error("No electionAgents profile was found for this account. Ask the Super Admin to create the agent profile.");
+  currentAgent=agentSnap.data();
+  currentProfile=currentAgent;
+  // Never fall back to users/{uid} for assignment, candidate or election data.
+  if(String(currentAgent.uid||agentSnap.id)!==String(user.uid))throw new Error("The agent profile UID does not match the signed-in account.");
+  if(currentAgent.active===false||String(currentAgent.status||"").toLowerCase()==="disabled")throw new Error("This agent account is disabled. Contact the Super Admin.");
+  if(String(currentAgent.agentRole||"").toLowerCase()!=="polling_unit_agent")throw new Error("This account is not assigned as a Polling Unit Agent.");
+  if(!currentAgent.candidateId||!currentAgent.electionType)throw new Error("The Super Admin agent profile is missing its candidate or election assignment.");
+  await hydrateAssignment();
+  if(!assignment.stateCode||!assignment.lgaCode||!assignment.wardCode||!assignment.pollingUnitCode||!assignment.pollingUnit)throw new Error("Your electionAgents profile does not contain a complete State, LGA, Ward and Polling Unit assignment. Contact the Super Admin.");
   displayAssignment();
 }
-function readDemoAgent(){try{return JSON.parse(localStorage.getItem("eyes_demo_agent")||"null")}catch(_){return null}}
-function demoFormData(){
-  const val=id=>$(id).value.trim();
-  return {uid:"DEMO-POLLING-UNIT-AGENT",fullName:val("demoName"),name:val("demoName"),username:val("demoUsername"),email:val("demoEmail"),phone:val("demoPhone"),agentRole:"polling_unit_agent",role:"polling_unit_agent",status:"active",active:true,electionType:val("demoElection"),electionName:electionNames[val("demoElection")],candidateId:val("demoCandidateId"),candidateName:val("demoCandidate"),geography:{state:val("demoState"),stateCode:val("demoStateCode"),lga:val("demoLga"),lgaCode:val("demoLgaCode"),ward:val("demoWard"),wardCode:val("demoWardCode"),pollingUnit:val("demoPollingUnit"),pollingUnitCode:val("demoPollingUnitCode")}};
-}
-function fillDemoForm(data){if(!data)return;const g=data.geography||{};const values={demoName:data.fullName,demoUsername:data.username,demoEmail:data.email,demoPhone:data.phone,demoElection:data.electionType,demoCandidate:data.candidateName,demoCandidateId:data.candidateId,demoState:g.state,demoStateCode:g.stateCode,demoLga:g.lga,demoLgaCode:g.lgaCode,demoWard:g.ward,demoWardCode:g.wardCode,demoPollingUnit:g.pollingUnit,demoPollingUnitCode:g.pollingUnitCode};for(const [id,value] of Object.entries(values))if(value!==undefined&&$(id))$(id).value=value;}
-$("demoAgentForm").addEventListener("submit",async event=>{event.preventDefault();const data=demoFormData();localStorage.setItem("eyes_demo_agent",JSON.stringify(data));applyDemoAgent(data);notice("demoAgentSaved","Test agent profile saved in this browser.",false);showView("dashboard")});
-$("demoReset").addEventListener("click",()=>{localStorage.removeItem("eyes_demo_agent");["ec8aResults","evidenceUploads","pollingUnitReports","backupRequests","voteBuyingAlerts"].forEach(k=>localStorage.removeItem("eyes_demo_"+k));location.reload()});
 
 function showView(view){
   document.querySelectorAll(".view-section").forEach(section=>section.classList.toggle("active",section.id===`view-${view}`));
@@ -586,10 +578,14 @@ $("menuBtn").addEventListener("click",()=>{
 $("overlay").addEventListener("click",closeMenu);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 
-async function logout(){showView("dashboard");notice("demoAgentSaved","Demo session remains local to this browser. Edit the test agent above or close this page.",false)}
-const savedDemoAgent=readDemoAgent();
-if(savedDemoAgent){fillDemoForm(savedDemoAgent);applyDemoAgent(savedDemoAgent)}else{applyDemoAgent(demoFormData())}
-
+async function logout(){
+  try{await signOut(auth)}finally{window.location.replace("index.html")}
+}
+onAuthStateChanged(auth,async user=>{
+  if(!user){window.location.replace("index.html");return}
+  try{await loadAuthenticatedProfile(user)}
+  catch(error){console.error("Polling Unit Agent profile error:",error);alert(error.message||"Could not load your assigned profile.");await signOut(auth);window.location.replace("index.html")}
+});
 
 
 // Cloudinary unsigned uploads for the three Successful Election evidence types.
@@ -872,7 +868,7 @@ $("ovEc8aForm").addEventListener("submit",async event=>{
   };
   const btn=$("saveOvEc8aBtn");btn.disabled=true;btn.textContent="Saving…";
   try{await addCleanDoc(collection(db,"ec8aResults"),payload);notice("ovEc8aNotice","Over Voting EC8A result saved successfully.",false);}
-  catch(error){console.error("Over Voting EC8A save failed:",error);notice("ovEc8aNotice",error.code==="permission-denied"?"The browser could not save this test record locally: ":"Could not save Over Voting EC8A: "+(error.message||"Please try again."),true);}
+  catch(error){console.error("Over Voting EC8A save failed:",error);notice("ovEc8aNotice",error.code==="permission-denied"?"Firebase denied this save. Firestore rules must permit authorised agents to create over_voting ec8aResults records.":"Could not save Over Voting EC8A: "+(error.message||"Please try again."),true);}
   finally{btn.disabled=false;btn.textContent="Save Over Voting EC8A";}
 });
 
@@ -907,7 +903,7 @@ $("ec8aForm").addEventListener("submit",async event=>{
     notice("ec8aNotice","EC8A result saved successfully.",false);
   }catch(error){
     console.error("EC8A save failed:",error);
-    notice("ec8aNotice",error.code==="permission-denied"?"The browser could not save this test record locally: ":"Could not save EC8A: "+(error.message||"Please try again."),true);
+    notice("ec8aNotice",error.code==="permission-denied"?"Firebase denied this save. The Firestore rules must explicitly permit authorised polling-unit agents to create candidate- and polling-unit-scoped ec8aResults records.":"Could not save EC8A: "+(error.message||"Please try again."),true);
   }finally{btn.disabled=false;btn.textContent="Save EC8A"}
 });
 
@@ -926,7 +922,7 @@ function attachIncident(formId,noticeId,collectionName,kind,extra){
       form.reset();
     }catch(err){
       console.error(collectionName+" incident submission failed:",err);
-      notice(noticeId,err.code==="permission-denied"?"The browser could not save this test report locally.":"Could not save report: "+(err.message||"Please try again."),true);
+      notice(noticeId,err.code==="permission-denied"?"Firebase rules do not yet permit this report type for this agent assignment.":"Could not save report: "+(err.message||"Please try again."),true);
     }finally{
       btn.disabled=false;
       btn.textContent=kind==="violence"?"Submit violence report":"Submit report";
@@ -974,7 +970,7 @@ function attachSubmission(formId,noticeId,collectionName,makeExtra){
       form.reset();
     }catch(error){
       console.error(collectionName+" submission failed:",error);
-      const message=error.code==="permission-denied"?"The browser could not save this test submission locally.":(error.message||"Could not submit. Check your connection and try again.");
+      const message=error.code==="permission-denied"?"Firebase denied this submission. The Firestore rules must allow this agent's assigned polling-unit report for this collection.":(error.message||"Could not submit. Check your connection and try again.");
       notice(noticeId,message,true);
     }finally{submit.disabled=false;submit.textContent=collectionName==="pollingUnitReports"?"Submit report":collectionName==="backupRequests"?"Submit backup request":"Submit alert"}
   });
