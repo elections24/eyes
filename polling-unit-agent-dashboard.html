@@ -120,9 +120,34 @@ h1{font-size:clamp(28px,3.5vw,44px);letter-spacing:-1.2px;margin:8px 0 10px;line
 #sharedEvidencePreview iframe{width:100%;height:340px;border:0}
 #sharedEvidenceStatus{font-size:13px;line-height:1.5;margin-top:12px;overflow-wrap:anywhere}
 
+
+/* Temporary authentication diagnostics: hidden unless an authentication/profile problem occurs. */
+.auth-diagnostic{display:none;position:fixed;z-index:9999;inset:0;background:rgba(12,35,25,.58);padding:18px;align-items:center;justify-content:center}
+.auth-diagnostic.show{display:flex}
+.auth-diagnostic-card{width:min(100%,620px);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e1eae5;border-radius:16px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.2)}
+.auth-diagnostic-card h2{margin:0 0 8px;color:#9e2923;font-size:18px}
+.auth-diagnostic-card p{font-size:13px;line-height:1.6;color:#52645a;margin:7px 0}
+.auth-diagnostic-card pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f6;border:1px solid #e1eae5;border-radius:9px;padding:12px;font-size:12px;color:#26382e}
+.auth-diagnostic-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.auth-diagnostic-actions a,.auth-diagnostic-actions button{border:0;border-radius:9px;padding:11px 15px;background:#08734f;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
+.auth-diagnostic-actions button{background:#edf5f0;color:#08734f}
+
 </style>
 </head>
 <body>
+<div id="authDiagnostic" class="auth-diagnostic" role="alert" aria-live="assertive">
+  <div class="auth-diagnostic-card">
+    <h2 id="authDiagnosticTitle">Authentication diagnostic</h2>
+    <p id="authDiagnosticIntro">The dashboard has encountered an authentication or profile-loading issue.</p>
+    <pre id="authDiagnosticDetails"></pre>
+    <p>Your account has not been signed out automatically. This diagnostic is temporary and is intended to show the exact stage that failed.</p>
+    <div class="auth-diagnostic-actions">
+      <a href="index.html">Return to login</a>
+      <button type="button" id="authDiagnosticClose">Close diagnostic</button>
+    </div>
+  </div>
+</div>
+
 <div class="app">
 <aside class="sidebar" id="sidebar">
   <div class="brand"><span class="brand-mark"><svg viewBox="0 0 64 64" fill="none"><path d="M5 32C12 20 21 14 32 14s20 6 27 18C52 44 43 50 32 50S12 44 5 32Z" stroke="#08734f" stroke-width="4"/><circle cx="32" cy="32" r="11" stroke="#dcae43" stroke-width="4"/><circle cx="32" cy="32" r="4" fill="#08734f"/></svg></span> THE EYES</div>
@@ -484,10 +509,26 @@ function agentCandidateName(){
 function normalStatus(p){return p?.active===false||p?.status==="disabled"?"Disabled":(p?.status||"Active")}
 function roleText(p){return p?.agentRoleLabel||roleNames[p?.agentRole]||roleNames[p?.role]||p?.role||"Polling Unit Agent"}
 
+let diagnosticStage="Dashboard initialisation";
+function setDiagnosticStage(stage){diagnosticStage=stage;console.info("[PU Agent diagnostic]",stage)}
+function showAuthDiagnostic(title,intro,details){
+  text("authDiagnosticTitle",title);
+  text("authDiagnosticIntro",intro);
+  text("authDiagnosticDetails",details);
+  $("authDiagnostic").classList.add("show");
+}
+$("authDiagnosticClose").addEventListener("click",()=>$("authDiagnostic").classList.remove("show"));
+
 async function readGeoDoc(collectionName,id){
   if(!id)return null;
-  try{const snap=await getDoc(doc(db,collectionName,String(id)));return snap.exists()?{id:snap.id,...snap.data()}:null}
-  catch(e){console.warn("Could not resolve "+collectionName,e);return null}
+  try{
+    setDiagnosticStage("Reading "+collectionName+" / "+String(id));
+    const snap=await getDoc(doc(db,collectionName,String(id)));
+    return snap.exists()?{id:snap.id,...snap.data()}:null;
+  }catch(e){
+    console.error("[PU Agent diagnostic] Geography read failed",{collectionName,documentId:String(id),code:e?.code,message:e?.message});
+    return null;
+  }
 }
 function recordName(record){return first(record?.name,record?.stateName,record?.lgaName,record?.wardName,record?.pollingUnitName,record?.unitName,record?.title,record?.label)}
 async function hydrateAssignment(){
@@ -545,18 +586,23 @@ function displayAssignment(){
 }
 async function loadAuthenticatedProfile(user){
   currentUser=user;
+  setDiagnosticStage("Reading electionAgents/"+user.uid);
   const agentSnap=await getDoc(doc(db,"electionAgents",user.uid));
   if(!agentSnap.exists())throw new Error("No electionAgents profile was found for this account. Ask the Super Admin to create the agent profile.");
   currentAgent=agentSnap.data();
   currentProfile=currentAgent;
+  setDiagnosticStage("Validating electionAgents profile fields");
   // Never fall back to users/{uid} for assignment, candidate or election data.
   if(String(currentAgent.uid||agentSnap.id)!==String(user.uid))throw new Error("The agent profile UID does not match the signed-in account.");
   if(currentAgent.active===false||String(currentAgent.status||"").toLowerCase()==="disabled")throw new Error("This agent account is disabled. Contact the Super Admin.");
   if(String(currentAgent.agentRole||"").toLowerCase()!=="polling_unit_agent")throw new Error("This account is not assigned as a Polling Unit Agent.");
   if(!currentAgent.candidateId||!currentAgent.electionType)throw new Error("The Super Admin agent profile is missing its candidate or election assignment.");
+  setDiagnosticStage("Loading assigned geography records");
   await hydrateAssignment();
+  setDiagnosticStage("Checking completed polling-unit assignment");
   if(!assignment.stateCode||!assignment.lgaCode||!assignment.wardCode||!assignment.pollingUnitCode||!assignment.pollingUnit)throw new Error("Your electionAgents profile does not contain a complete State, LGA, Ward and Polling Unit assignment. Contact the Super Admin.");
   displayAssignment();
+  setDiagnosticStage("Dashboard profile loaded successfully");
 }
 
 function showView(view){
@@ -582,9 +628,31 @@ async function logout(){
   try{await signOut(auth)}finally{window.location.replace("index.html")}
 }
 onAuthStateChanged(auth,async user=>{
-  if(!user){window.location.replace("index.html");return}
-  try{await loadAuthenticatedProfile(user)}
-  catch(error){console.error("Polling Unit Agent profile error:",error);alert(error.message||"Could not load your assigned profile.");await signOut(auth);window.location.replace("index.html")}
+  if(!user){
+    console.error("[PU Agent diagnostic] Firebase reports no authenticated user on the dashboard.");
+    showAuthDiagnostic(
+      "Firebase session not detected",
+      "The dashboard opened, but Firebase reports that no user is currently signed in. The page will not automatically sign you out or redirect, so this condition can be inspected.",
+      "Stage: Authentication state listener\nAuthenticated user: null\nFirebase project: "+firebaseConfig.projectId+"\nNext check: confirm the login page and dashboard use the same Firebase project and browser authentication session."
+    );
+    return;
+  }
+  try{
+    await loadAuthenticatedProfile(user);
+    $("authDiagnostic").classList.remove("show");
+  }catch(error){
+    const details=[
+      "Stage: "+diagnosticStage,
+      "Firebase project: "+firebaseConfig.projectId,
+      "Signed-in UID: "+(user.uid||"Unavailable"),
+      "Error code: "+(error?.code||"Not supplied"),
+      "Error message: "+(error?.message||String(error))
+    ].join("\n");
+    console.error("[PU Agent diagnostic] Profile loading failed",{stage:diagnosticStage,uid:user.uid,code:error?.code,message:error?.message,error});
+    showAuthDiagnostic("Agent dashboard could not finish loading","Firebase authentication is still present, but the dashboard encountered this exact profile-loading failure:",details);
+    // Deliberately do not call signOut() or redirect. Keep the authenticated session
+    // available so the actual failure can be diagnosed without forcing another login.
+  }
 });
 
 
