@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================
+    // THE EYES — Super Admin identity
+    // Super Admin is created manually in Firebase Auth and
+    // users/{uid}. Election agents are stored only in
+    // electionAgents/{uid}; never duplicate them in users.
+    // =====================================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function adminPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function isSuperAdmin() {
+      return signedIn()
+        && exists(adminPath())
+        && get(adminPath()).data.role == 'super_admin'
+        && get(adminPath()).data.status == 'active'
+        && get(adminPath()).data.active != false;
+    }
+
+    // Super Admin profile only. It is provisioned manually.
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // One profile per agent UID. Agents can read their own profile;
+    // only the Super Admin can list/manage all agent profiles.
+    match /electionAgents/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Candidate master records: create, list, edit and activate/deactivate.
+    match /candidates/{candidateId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+
+    // Geographical master data managed by the Super Admin.
+    // These match the collections used by the dashboard.
+    match /geographyStates/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+    match /geographyLGAs/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+    match /geographyWards/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+    match /geographyPollingUnits/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+    match /geographySenatorialZones/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+    match /geographyFederalConstituencies/{recordId} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+
+    // All unlisted collections stay closed until their own
+    // role- and election-scope rules are explicitly defined.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
