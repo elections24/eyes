@@ -484,24 +484,39 @@ function agentCandidateName(){
 function normalStatus(p){return p?.active===false||p?.status==="disabled"?"Disabled":(p?.status||"Active")}
 function roleText(p){return p?.agentRoleLabel||roleNames[p?.agentRole]||roleNames[p?.role]||p?.role||"Polling Unit Agent"}
 
-// The Super Admin profile already stores the complete assignment. Read it directly
-// from electionAgents/{uid}; agent dashboards do not need geography collection access.
+function firstGeo(...values){
+  for(const value of values){
+    if(value!==undefined&&value!==null&&String(value).trim()!=="") return value;
+  }
+  return "";
+}
+
+// The electionAgents profile is the authoritative assignment source.
+// Do not query geography collections here: Firestore rules reserve those
+// collections for Super Admin, and these reads are unnecessary.
 async function hydrateAssignment(){
-  const storedGeo=currentAgent?.geography||{};
+  const g=currentAgent?.geography||{};
   const scope=currentAgent?.assignedScope||{};
+  const stateCode=firstGeo(g.stateCode,g.state_code,scope.stateCode,scope.state_code,currentAgent?.stateCode);
+  const zoneCode=firstGeo(g.senatorialZoneCode,scope.senatorialZoneCode,currentAgent?.senatorialZoneCode);
+  const constCode=firstGeo(g.federalConstituencyCode,scope.federalConstituencyCode,currentAgent?.federalConstituencyCode);
+  const lgaCode=firstGeo(g.lgaCode,g.lga_code,scope.lgaCode,scope.lga_code,currentAgent?.lgaCode);
+  const wardCode=firstGeo(g.wardCode,g.ward_code,scope.wardCode,scope.ward_code,currentAgent?.wardCode);
+  const puCode=firstGeo(g.pollingUnitCode,g.polling_unit_code,scope.pollingUnitCode,scope.polling_unit_code,currentAgent?.pollingUnitCode);
+
   assignment={
-    state:first(storedGeo.state,storedGeo.stateName,currentAgent?.state,scope.state,scope.stateName,""),
-    stateCode:first(storedGeo.stateCode,scope.stateCode,currentAgent?.stateCode,""),
-    senatorialZone:first(storedGeo.senatorialZone,currentAgent?.senatorialZone,scope.senatorialZone,""),
-    senatorialZoneCode:first(storedGeo.senatorialZoneCode,scope.senatorialZoneCode,currentAgent?.senatorialZoneCode,""),
-    federalConstituency:first(storedGeo.federalConstituency,currentAgent?.federalConstituency,scope.federalConstituency,""),
-    federalConstituencyCode:first(storedGeo.federalConstituencyCode,scope.federalConstituencyCode,currentAgent?.federalConstituencyCode,""),
-    lga:first(storedGeo.lga,storedGeo.lgaName,currentAgent?.lga,currentAgent?.lgaName,scope.lga,scope.lgaName,""),
-    lgaCode:first(storedGeo.lgaCode,scope.lgaCode,currentAgent?.lgaCode,""),
-    ward:first(storedGeo.ward,storedGeo.wardName,currentAgent?.ward,currentAgent?.wardName,scope.ward,scope.wardName,""),
-    wardCode:first(storedGeo.wardCode,scope.wardCode,currentAgent?.wardCode,""),
-    pollingUnit:first(storedGeo.pollingUnit,storedGeo.pollingUnitName,storedGeo.unitName,currentAgent?.pollingUnit,currentAgent?.pollingUnitName,scope.pollingUnit,scope.pollingUnitName,""),
-    pollingUnitCode:first(storedGeo.pollingUnitCode,scope.pollingUnitCode,currentAgent?.pollingUnitCode,"")
+    state:firstGeo(g.state,g.stateName,g.state_name,scope.state,currentAgent?.state,currentAgent?.stateName),
+    stateCode,
+    senatorialZone:firstGeo(g.senatorialZone,g.senatorialZoneName,scope.senatorialZone,currentAgent?.senatorialZone),
+    senatorialZoneCode:zoneCode,
+    federalConstituency:firstGeo(g.federalConstituency,g.federalConstituencyName,scope.federalConstituency,currentAgent?.federalConstituency),
+    federalConstituencyCode:constCode,
+    lga:firstGeo(g.lga,g.lgaName,g.localGovernment,scope.lga,scope.lgaName,currentAgent?.lga,currentAgent?.lgaName),
+    lgaCode,
+    ward:firstGeo(g.ward,g.wardName,scope.ward,scope.wardName,currentAgent?.ward,currentAgent?.wardName),
+    wardCode,
+    pollingUnit:firstGeo(g.pollingUnit,g.pollingUnitName,g.unitName,scope.pollingUnit,scope.pollingUnitName,currentAgent?.pollingUnit,currentAgent?.pollingUnitName),
+    pollingUnitCode:puCode
   };
 }
 function displayAssignment(){
@@ -538,18 +553,39 @@ function displayAssignment(){
 async function loadAuthenticatedProfile(user){
   currentUser=user;
   const agentSnap=await getDoc(doc(db,"electionAgents",user.uid));
-  if(!agentSnap.exists())throw new Error("No electionAgents profile was found for this account. Ask the Super Admin to create the agent profile.");
+  if(!agentSnap.exists()) throw new Error("No electionAgents profile was found for this account. Ask the Super Admin to create the agent profile.");
+
   currentAgent=agentSnap.data();
   currentProfile=currentAgent;
-  // Never fall back to users/{uid} for assignment, candidate or election data.
-  if(String(currentAgent.uid||agentSnap.id)!==String(user.uid))throw new Error("The agent profile UID does not match the signed-in account.");
-  const status=String(currentAgent.status||"").toLowerCase();
-  if(currentAgent.active===false||status==="disabled")throw new Error("This agent account is disabled. Contact the Super Admin.");
-  const role=String(first(currentAgent.agentRole,currentAgent.role,"")).toLowerCase().replace(/[\s-]+/g,"_");
-  if(role!=="polling_unit_agent")throw new Error("This account is not assigned as a Polling Unit Agent. The agentRole field must be polling_unit_agent.");
-  if(!first(currentAgent.candidateId,currentAgent.assignedScope?.candidateId,currentAgent.candidate?.id)||!currentAgent.electionType)throw new Error("The Super Admin agent profile is missing its candidate or election assignment.");
+
+  if(String(currentAgent.uid||agentSnap.id)!==String(user.uid)){
+    throw new Error("The agent profile UID does not match the signed-in account.");
+  }
+
+  const status=String(currentAgent.status||"").trim().toLowerCase();
+  if(currentAgent.active===false||status==="disabled"||status==="inactive"){
+    throw new Error("This agent account is disabled or inactive. Contact the Super Admin.");
+  }
+  if(status!=="active"){
+    throw new Error("Your agent profile status must be set to 'active' by the Super Admin.");
+  }
+
+  const role=String(currentAgent.agentRole||currentAgent.role||"")
+    .trim().toLowerCase().replace(/[\\s-]+/g,"_");
+  if(role!=="polling_unit_agent"){
+    throw new Error("This account's agentRole must be polling_unit_agent.");
+  }
+
+  if(!agentCandidateId()||!currentAgent.electionType){
+    throw new Error("The Super Admin agent profile is missing its candidate or election assignment.");
+  }
+
   await hydrateAssignment();
-  if(!assignment.stateCode||!assignment.lgaCode||!assignment.wardCode||!assignment.pollingUnitCode||!assignment.pollingUnit)throw new Error("Your electionAgents/{uid} profile must contain geography.stateCode, geography.lgaCode, geography.wardCode, geography.pollingUnitCode and geography.pollingUnit. Contact the Super Admin.");
+
+  if(!assignment.stateCode||!assignment.lgaCode||!assignment.wardCode||!assignment.pollingUnitCode||!assignment.pollingUnit){
+    throw new Error("The electionAgents profile must contain stateCode, lgaCode, wardCode, pollingUnitCode and pollingUnit name inside its geography assignment.");
+  }
+
   displayAssignment();
 }
 
@@ -575,31 +611,30 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
 async function logout(){
   try{await signOut(auth)}finally{window.location.replace("index.html")}
 }
-// Wait for Firebase to finish restoring the persisted session before routing.
-// A profile/rules/network error must not silently sign the user out.
-let profileLoadInProgress=false;
-async function initialiseAgentDashboard(){
+let authInitializationHandled=false;
+onAuthStateChanged(auth,async user=>{
+  if(!user){
+    if(!authInitializationHandled){
+      authInitializationHandled=true;
+      window.location.replace("index.html");
+    }
+    return;
+  }
+  authInitializationHandled=true;
   try{
-    if(typeof auth.authStateReady==="function") await auth.authStateReady();
-    const user=auth.currentUser;
-    if(!user){window.location.replace("index.html");return;}
-    if(profileLoadInProgress)return;
-    profileLoadInProgress=true;
     await loadAuthenticatedProfile(user);
   }catch(error){
-    console.error("Polling Unit Agent profile error:",error);
-    const message=error?.code==="permission-denied"
-      ? "Firebase denied access to your electionAgents profile. Check the get permission for electionAgents/{uid} in Firestore rules. Your login session has been kept active."
-      : (error.message||"Could not load your assigned profile. Your login session has been kept active.");
-    alert(message);
-  }finally{profileLoadInProgress=false;}
-}
-onAuthStateChanged(auth,user=>{
-  if(user){initialiseAgentDashboard();}
-  else if(auth.currentUser===null){
-    // The observer's initial callback is delivered after auth initialisation;
-    // authStateReady is still awaited to avoid racing persisted-session restore.
-    initialiseAgentDashboard();
+    console.error("Polling Unit Agent profile initialization failed:",error);
+    let banner=document.getElementById("agentProfileError");
+    if(!banner){
+      banner=document.createElement("div");
+      banner.id="agentProfileError";
+      banner.style.cssText="margin:18px 3%;padding:14px 16px;border:1px solid #f0c7c3;border-radius:12px;background:#fff0ef;color:#9e2923;font:13px/1.55 Inter,Segoe UI,Arial,sans-serif;white-space:pre-wrap;";
+      const content=document.querySelector(".content");
+      if(content) content.prepend(banner);
+      else document.querySelector("main")?.prepend(banner);
+    }
+    banner.textContent="Your Firebase login is still active, but the agent profile could not be loaded.\n\n"+(error.message||"Unknown profile error")+"\n\nPlease contact the Super Admin or retry after correcting the agent profile. You have not been signed out.";
   }
 });
 
