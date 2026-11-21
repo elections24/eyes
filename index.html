@@ -143,7 +143,7 @@
 
       <div class="form-heading">
         <div class="form-brand-text">
-          <div class="form-brand-name">GREENEYES</div>
+          <div class="form-brand-name">THE EYES</div>
           <div class="form-brand-sub">Election Monitoring &amp; Reporting System</div>
         </div>
         <div class="form-logo admin-entry-logo" role="button" tabindex="0"
@@ -282,7 +282,7 @@
         let dashboard = "";
         let accountProfile = null;
 
-        if (userProfile && String(userProfile.role || "").trim().toLowerCase() === "super_admin") {
+        if (userProfile && String(userProfile.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_") === "super_admin") {
           accountProfile = userProfile;
           role = "super_admin";
           dashboard = "admin-dashboard.html";
@@ -304,7 +304,7 @@
           throw new Error("The username does not match this account. Please check your details.");
         }
 
-        if (accountProfile.active === false || accountProfile.status === "disabled") {
+        if (accountProfile.active === false || String(accountProfile.status || "").trim().toLowerCase() === "disabled") {
           await auth.signOut();
           throw new Error("Your account is currently disabled. Contact your system administrator.");
         }
