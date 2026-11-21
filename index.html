@@ -220,7 +220,10 @@
     const roleDashboards = {
       admin: "admin-dashboard.html",
       super_admin: "admin-dashboard.html",
+      // Polling Unit Agent accounts must open this exact dashboard filename.
       polling_unit_agent: "polling-unit-agent-dashboard.html",
+      polling_unit: "polling-unit-agent-dashboard.html",
+      polling_unit_observer: "polling-unit-agent-dashboard.html",
       ward_agent: "ward-agent-dashboard.html",
       ward_collation_agent: "ward-collation-dashboard.html",
       ward_collation: "ward-collation-dashboard.html",
@@ -295,6 +298,8 @@
           accountProfile = agentSnap.data();
           role = String(accountProfile.agentRole || accountProfile.role || "")
             .trim().toLowerCase().replace(/[\s-]+/g, "_");
+          // Prefer the local role map over any stale/custom URL stored in the
+          // profile, so polling_unit_agent always opens the intended HTML file.
           dashboard = roleDashboards[role] || accountProfile.dashboardUrl || "";
         }
 
