@@ -208,7 +208,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -288,9 +288,9 @@
       }
 
       try {
-        // Keep the authenticated session available when the browser moves
-        // from index.html to admin-dashboard.html in the same hosted origin.
-        await setPersistence(auth, browserSessionPersistence);
+        // Keep the authenticated session in persistent browser storage so it
+        // remains available after navigation and page refreshes.
+        await setPersistence(auth, browserLocalPersistence);
         const credential = await signInWithEmailAndPassword(auth, email, password);
         const uid = credential.user.uid;
 
